@@ -1,26 +1,31 @@
 ﻿const express = require('express');
 const multer = require('multer');
 const fs = require('fs-extra');
-fs.ensureDirSync('uploads');
-fs.ensureDirSync('panos');
 const xml2js = require('xml2js');
 const path = require('path');
+const cors = require('cors');
+
+fs.ensureDirSync('uploads');
+fs.ensureDirSync('panos');
 
 const app = express();
-const port = 3000;
 
-// Cấu hình lưu file upload vào thư mục uploads/
+// Bật CORS để client khác domain có thể gọi
+app.use(cors());
+
+// Phục vụ file tĩnh như index.html, upload.html, panos/
+app.use(express.static('.'));
+app.use(express.urlencoded({ extended: true }));
+
+// Cấu hình multer để lưu file vào thư mục uploads/
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
     filename: (req, file, cb) => cb(null, Date.now() + '_' + file.originalname)
 });
 const upload = multer({ storage });
 
-app.use(express.static('.'));
-app.use(express.urlencoded({ extended: true }));
-
 // Route xử lý upload ảnh và cập nhật tour.xml
-app.post('/upload', upload.single('pano'), async (req, res) => {
+app.post('/', upload.single('pano'), async (req, res) => {
     console.log('📥 Nhận upload mới...');
 
     try {
@@ -32,7 +37,7 @@ app.post('/upload', upload.single('pano'), async (req, res) => {
         const panoFileName = path.basename(file.path);
         const targetPath = `panos/${panoFileName}`;
 
-        // Di chuyển file từ uploads → panos
+        // Di chuyển ảnh từ uploads → panos
         await fs.move(file.path, targetPath);
         console.log('✅ Đã chuyển ảnh vào panos/');
 
@@ -82,19 +87,21 @@ app.post('/upload', upload.single('pano'), async (req, res) => {
             }]
         };
 
-        // Thêm vào scene list
+        // Thêm scene mới vào danh sách
         result.krpano.scene.push(newScene);
         const updatedXML = builder.buildObject(result);
         await fs.writeFile(xmlPath, updatedXML, 'utf8');
         console.log('✅ Đã cập nhật tour.xml');
 
-        res.send(`<h3>Upload thành công!</h3><a href="/tour.html" target="_blank">👉 Xem tour mới</a>`);
+        res.redirect('/index.html');
     } catch (err) {
         console.error('❌ Lỗi khi xử lý upload:', err);
         res.status(500).send('Lỗi xử lý upload');
     }
 });
 
+// 👉 Dùng port được truyền qua biến môi trường hoặc mặc định 3000
+const port = process.env.PORT;
 app.listen(port, () => {
-    console.log(`🚀 Server chạy tại http://localhost:${port}`);
+    console.log(`🚀 Server chạy tại cổng ${port}`);
 });
